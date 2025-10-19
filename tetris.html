@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Neon Tetris vFinal</title>
+<style>
+body {
+  margin:0;
+  height:100vh;
+  background:#000;
+  font-family:"Orbitron",sans-serif;
+  color:#fff;
+  overflow:hidden;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  touch-action:none;
+}
+
+#gameWrapper {
+  display:flex;
+  flex-direction:row;
+  justify-content:center;
+  align-items:flex-start;
+  gap:20px;
+  flex-wrap:nowrap;
+}
+
+#tetris {
+  border:2px solid rgba(255,255,255,0.5);
+  border-radius:12px;
+  background:rgba(255,255,255,0.05);
+  box-shadow:0 0 20px rgba(255,255,255,0.3);
+}
+
+#info {
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  width:120px;
+}
+
+#score { font-size:20px; margin-bottom:10px; text-shadow:0 0 5px white; }
+#nextPiece { font-size:16px; text-shadow:0 0 5px white; }
+#nextCanvas {
+  border:2px solid rgba(255,255,255,0.5);
+  border-radius:8px;
+  background:rgba(255,255,255,0.05);
+  box-shadow:0 0 10px rgba(255,255,255,0.2);
+  margin-top:5px;
+}
+
+.buttons { display:flex; gap:10px; margin-top:15px; flex-wrap:wrap; }
+button {
+  background:transparent;
+  color:white;
+  border:2px solid rgba(255,255,255,0.6);
+  border-radius:10px;
+  padding:6px 18px;
+  font-family:"Orbitron",sans-serif;
+  cursor:pointer;
+  box-shadow:0 0 10px rgba(255,255,255,0.4);
+  transition:0.2s;
+}
+button:hover { box-shadow:0 0 20px rgba(255,255,255,0.8); }
+
+#touchControls {
+  display:none;
+  gap:10px;
+  justify-content:center;
+  margin-top:15px;
+  flex-wrap:wrap;
+}
+
+.touchBtn {
+  width:60px; height:60px;
+  border-radius:12px;
+  border:2px solid rgba(255,255,255,0.6);
+  background: rgba(255,255,255,0.05);
+  color:#fff;
+  font-family:"Orbitron",sans-serif;
+  font-size:16px;
+  display:flex; justify-content:center; align-items:center;
+  box-shadow:0 0 10px rgba(255,255,255,0.4);
+  user-select:none;
+  touch-action: manipulation;
+}
+
+/* Mobile layout */
+@media (max-width:768px){
+  #gameWrapper { flex-direction:column; align-items:center; }
+  #info { width:auto; align-items:center; margin-top:10px; }
+  #nextCanvas { width:60px; height:60px; }
+  #mobileButtons { display:flex; justify-content:space-between; width:100%; margin-top:10px; padding:0 20px; }
+  #touchControls { display:flex; margin-top:10px; }
+}
+</style>
+</head>
+<body>
+
+<div id="gameWrapper">
+  <canvas id="tetris" width="300" height="600"></canvas>
+
+  <div id="info">
+    <div id="score">Score: 0</div>
+    <div id="nextPiece">
+      Next:<canvas id="nextCanvas" width="80" height="80"></canvas>
+    </div>
+
+    <div class="buttons" id="mobileButtons">
+      <button id="startBtn">START</button>
+      <button id="pauseBtn">PAUSE</button>
+    </div>
+  </div>
+</div>
+
+<div id="touchControls">
+  <div class="touchBtn" id="leftBtn">◀</div>
+  <div class="touchBtn" id="downBtn">▼</div>
+  <div class="touchBtn" id="rotateBtn">⟳</div>
+  <div class="touchBtn" id="rightBtn">▶</div>
+  <div class="touchBtn" id="dropBtn">⤓</div>
+</div>
+
+<!-- Sounds -->
+<audio id="lineSound" src="https://freesound.org/data/previews/331/331912_3248244-lq.mp3"></audio>
+<audio id="dropSound" src="https://freesound.org/data/previews/331/331913_3248244-lq.mp3"></audio>
+<audio id="gameOverSound" src="https://freesound.org/data/previews/331/331915_3248244-lq.mp3"></audio>
+<audio id="fallSound" src="https://freesound.org/data/previews/92/92212_634166-lq.mp3" loop></audio>
+
+<script>
+const canvas=document.getElementById("tetris");
+const ctx=canvas.getContext("2d");
+const nextCanvas=document.getElementById("nextCanvas");
+const nctx=nextCanvas.getContext("2d");
+const startBtn=document.getElementById("startBtn");
+const pauseBtn=document.getElementById("pauseBtn");
+const scoreDisplay=document.getElementById("score");
+
+const leftBtn=document.getElementById("leftBtn");
+const rightBtn=document.getElementById("rightBtn");
+const downBtn=document.getElementById("downBtn");
+const rotateBtn=document.getElementById("rotateBtn");
+const dropBtn=document.getElementById("dropBtn");
+
+const fallSound=document.getElementById("fallSound");
+const lineSound=document.getElementById("lineSound");
+const dropSound=document.getElementById("dropSound");
+const gameOverSound=document.getElementById("gameOverSound");
+fallSound.loop=true;
+
+const ROWS=20,COLS=10,BLOCK_SIZE=30;
+const COLORS=["#FFF","#FFF","#FFF","#FFF","#FFF","#FFF","#FFF"];
+const PIECES=[[[1,1,1,1]],[[1,1],[1,1]],[[0,1,0],[1,1,1]],[[1,0,0],[1,1,1]],[[0,0,1],[1,1,1]],[[0,1,1],[1,1,0]],[[1,1,0],[0,1,1]]];
+
+let board,score,dropInterval,dropCounter,lastTime,gameOver,paused,started;
+let piece,nextPiece;
+
+function randomPiece(){ return {shape:PIECES[Math.floor(Math.random()*PIECES.length)], x:3, y:0, color:COLORS[Math.floor(Math.random()*COLORS.length)]}; }
+
+function resetGame(){
+  board=Array.from({length:ROWS},()=>Array(COLS).fill(0));
+  score=0; scoreDisplay.textContent="Score: "+score;
+  piece=randomPiece(); nextPiece=randomPiece();
+  gameOver=false; paused=false; started=true; dropInterval=800; dropCounter=0; lastTime=0;
+  fallSound.pause(); fallSound.currentTime=0;
+  updateNext(); update();
+}
+
+function drawBlock(x,y,color){ ctx.fillStyle=color; ctx.shadowColor=color; ctx.shadowBlur=8; ctx.fillRect(x*BLOCK_SIZE,y*BLOCK_SIZE,BLOCK_SIZE-1,BLOCK_SIZE-1); ctx.shadowBlur=0; }
+function drawBoard(){ ctx.clearRect(0,0,canvas.width,canvas.height); for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(board[r][c]) drawBlock(c,r,"#FFF"); }
+function drawPiece(p){ p.shape.forEach((row,r)=>row.forEach((v,c)=>{if(v) drawBlock(p.x+c,p.y+r,p.color)})); }
+
+function collide(board,p){ for(let r=0;r<p.shape.length;r++) for(let c=0;c<p.shape[r].length;c++) if(p.shape[r][c] && (board[r+p.y] && board[r+p.y][c+p.x])!==0) return true; return false; }
+function merge(board,p){ p.shape.forEach((row,r)=>row.forEach((v,c)=>{if(v) board[p.y+r][p.x+c]=1})); }
+function rotate(p){ const r=p.shape[0].map((_,i)=>p.shape.map(row=>row[i])).reverse(); const prev=p.shape; p.shape=r; if(collide(board,p)) p.shape=prev; }
+
+function startFallSound(){ if(fallSound.paused){ fallSound.currentTime=0; fallSound.play(); } }
+function stopFallSound(){ fallSound.pause(); fallSound.currentTime=0; }
+
+function drop(){
+  piece.y++;
+  startFallSound();
+  if(collide(board,piece)){
+    piece.y--; merge(board,piece); clearLines(); piece=nextPiece; nextPiece=randomPiece(); updateNext();
+    stopFallSound();
+    if(collide(board,piece)){ gameOver=true; started=false; gameOverSound.play(); showGameOver(); }
+  }
+  dropCounter=0;
+}
+
+function instantDrop(){ while(!collide(board,piece)) piece.y++; piece.y--; drop(); dropSound.play(); }
+function softDrop(){ piece.y++; startFallSound(); if(collide(board,piece)) piece.y--; }
+
+function clearLines(){
+  let lines=0;
+  for(let r=ROWS-1;r>=0;r--){ if(board[r].every(cell=>cell!==0)){ board.splice(r,1); board.unshift(Array(COLS).fill(0)); lines++; r++; } }
+  if(lines>0){ score+=lines*10; scoreDisplay.textContent="Score: "+score; lineSound.play(); dropInterval=Math.max(100,dropInterval-30); }
+}
+
+function updateNext(){
+  nctx.clearRect(0,0,nextCanvas.width,nextCanvas.height);
+  nextPiece.shape.forEach((row,r)=>row.forEach((v,c)=>{ if(v){ nctx.fillStyle="#FFF"; nctx.shadowColor="#FFF"; nctx.shadowBlur=5; nctx.fillRect(c*20,r*20,18,18); nctx.shadowBlur=0; } }));
+}
+
+function update(time=0){
+  if(!started||paused) { stopFallSound(); return; }
+  const delta=time-lastTime; lastTime=time; dropCounter+=delta;
+  if(dropCounter>dropInterval) drop();
+  drawBoard(); drawPiece(piece);
+  requestAnimationFrame(update);
+}
+
+document.addEventListener("keydown",e=>{
+  if(!started||paused||gameOver) return;
+  if(e.key==="a") piece.x--; if(e.key==="d") piece.x++;
+  if(e.key==="w") rotate(piece); if(e.key===" ") instantDrop(); if(e.key==="s") softDrop();
+  if(collide(board,piece)){ if(e.key==="a") piece.x++; if(e.key==="d") piece.x--; }
+});
+
+startBtn.addEventListener("click",()=>{ if(!started) resetGame(); });
+pauseBtn.addEventListener("click",()=>{ paused=!paused; if(paused) stopFallSound(); else update(); });
+
+function repeatOnHold(btn,action){
+  let interval;
+  btn.addEventListener("touchstart",e=>{ e.preventDefault(); action(); interval=setInterval(action,100); });
+  btn.addEventListener("touchend",e=>{ clearInterval(interval); });
+  btn.addEventListener("touchcancel",e=>{ clearInterval(interval); });
+}
+
+repeatOnHold(leftBtn,()=>{ piece.x--; });
+repeatOnHold(rightBtn,()=>{ piece.x++; });
+repeatOnHold(downBtn,()=>{ softDrop(); });
+repeatOnHold(rotateBtn,()=>{ rotate(piece); });
+repeatOnHold(dropBtn,()=>{ instantDrop(); });
+
+function showGameOver(){
+  ctx.fillStyle="rgba(0,0,0,0.8)";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle="#FF00FF";
+  ctx.font="30px Orbitron";
+  ctx.textAlign="center";
+  ctx.fillText("GAME OVER",canvas.width/2,canvas.height/2-20);
+  ctx.fillText("Score: "+score,canvas.width/2,canvas.height/2+20);
+  stopFallSound();
+}
+</script>
+</body>
+</html>

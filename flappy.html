@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Neon Flappy Bird</title>
+<style>
+body {
+  margin: 0;
+  background: #000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-family: "Orbitron", sans-serif;
+  color: #0ff;
+  overflow: hidden;
+}
+canvas {
+  background: rgba(255,255,255,0.05);
+  border: 2px solid rgba(0,255,255,0.5);
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(0,255,255,0.3);
+}
+#score, #highScoreDisplay {
+  position: absolute;
+  top: 20px;
+  font-size: 24px;
+  text-shadow: 0 0 5px #0ff;
+}
+#highScoreDisplay { top: 60px; }
+#gameOverScreen {
+  position: absolute;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #0ff;
+  font-size: 32px;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.8);
+  text-align: center;
+}
+#restartBtn, #startBtn {
+  margin-top: 20px;
+  background: transparent;
+  color: #0ff;
+  border: 2px solid rgba(0,255,255,0.6);
+  border-radius: 12px;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-family: "Orbitron", sans-serif;
+  box-shadow: 0 0 10px rgba(0,255,255,0.4);
+}
+#restartBtn:hover, #startBtn:hover { box-shadow: 0 0 20px #0ff; border-color:#0ff;}
+#startScreen {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #0ff;
+  font-size: 32px;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.8);
+  text-align: center;
+}
+</style>
+</head>
+<body>
+
+<canvas id="flappy" width="400" height="600"></canvas>
+<div id="score">Score: 0</div>
+<div id="highScoreDisplay">High Score: 0</div>
+
+<div id="startScreen">
+  NEON FLAPPY BIRD
+  <button id="startBtn">Start</button>
+</div>
+
+<div id="gameOverScreen">
+  GAME OVER<br>
+  <div id="finalScore"></div>
+  <div id="finalHighScore"></div>
+  <button id="restartBtn">Restart</button>
+</div>
+
+<script>
+const canvas = document.getElementById('flappy');
+const ctx = canvas.getContext('2d');
+const scoreDisplay = document.getElementById('score');
+const highScoreDisplay = document.getElementById('highScoreDisplay');
+const gameOverScreen = document.getElementById('gameOverScreen');
+const finalScore = document.getElementById('finalScore');
+const finalHighScore = document.getElementById('finalHighScore');
+const restartBtn = document.getElementById('restartBtn');
+const startScreen = document.getElementById('startScreen');
+const startBtn = document.getElementById('startBtn');
+
+const GRAVITY = 0.5;
+const FLAP = -8;
+
+let bird, pipes, score, gameOver, animationId, gameStarted=false;
+let highScore = 0;
+let pipeSpeed = 2;       // starting speed
+let pipeGap = 180;       // starting gap
+let minGap = 120;        // minimum gap
+let maxSpeed = 7;        // max speed
+
+// Bird
+function init() {
+  bird = { x: 80, y: canvas.height/2, width: 30, height: 30, velocity: 0 };
+  pipes = [];
+  score = 0;
+  gameOver = false;
+  pipeSpeed = 2;
+  pipeGap = 180;
+  scoreDisplay.textContent = "Score: " + score;
+  gameOverScreen.style.display = "none";
+  startScreen.style.display = "none";
+  spawnPipe();
+  cancelAnimationFrame(animationId);
+  loop();
+}
+
+// Pipes
+function spawnPipe() {
+  const topHeight = Math.random() * (canvas.height - pipeGap - 100) + 50;
+  pipes.push({ x: canvas.width, top: topHeight, bottom: topHeight + pipeGap, width: 50 });
+}
+
+// Draw
+function draw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Draw bird
+  ctx.fillStyle = "#0ff";
+  ctx.shadowColor = "#0ff";
+  ctx.shadowBlur = 10;
+  ctx.fillRect(bird.x, bird.y, bird.width, bird.height);
+  ctx.shadowBlur = 0;
+
+  // Draw pipes
+  pipes.forEach(pipe => {
+    ctx.fillStyle = "#0ff";
+    ctx.shadowColor = "#0ff";
+    ctx.shadowBlur = 5;
+    ctx.fillRect(pipe.x, 0, pipe.width, pipe.top);
+    ctx.fillRect(pipe.x, pipe.bottom, pipe.width, canvas.height - pipe.bottom);
+    ctx.shadowBlur = 0;
+  });
+}
+
+// Update
+function update() {
+  bird.velocity += GRAVITY;
+  bird.y += bird.velocity;
+
+  pipes.forEach(pipe => { pipe.x -= pipeSpeed; });
+
+  // Spawn new pipes
+  if(pipes.length && pipes[pipes.length-1].x < canvas.width - 200){
+    spawnPipe();
+  }
+
+  // Remove offscreen pipes & update score
+  if(pipes.length && pipes[0].x + pipes[0].width < 0){
+    pipes.shift();
+    score++;
+    scoreDisplay.textContent = "Score: " + score;
+
+    // Increase difficulty
+    pipeSpeed = Math.min(maxSpeed, 2 + score*0.05);
+    pipeGap = Math.max(minGap, 180 - score*2);
+
+    if(score > highScore){
+      highScore = score;
+      highScoreDisplay.textContent = "High Score: " + highScore;
+    }
+  }
+
+  // Collision
+  for(const pipe of pipes){
+    if(bird.x + bird.width > pipe.x && bird.x < pipe.x + pipe.width &&
+       (bird.y < pipe.top || bird.y + bird.height > pipe.bottom)) {
+      endGame();
+    }
+  }
+
+  if(bird.y + bird.height > canvas.height || bird.y < 0){
+    endGame();
+  }
+}
+
+// Loop
+function loop(){
+  update();
+  draw();
+  if(!gameOver) animationId = requestAnimationFrame(loop);
+}
+
+// Flap
+function flap() { if(!gameOver && gameStarted) bird.velocity = FLAP; }
+document.addEventListener('keydown', e => { if(e.code === "Space") flap(); });
+canvas.addEventListener('mousedown', flap);
+canvas.addEventListener('touchstart', e => { e.preventDefault(); flap(); });
+
+// Game over
+function endGame(){
+  gameOver = true;
+  finalScore.textContent = "Score: " + score;
+  finalHighScore.textContent = "High Score: " + highScore;
+  gameOverScreen.style.display = "flex";
+}
+
+// Start button
+startBtn.addEventListener("click", () => { gameStarted=true; init(); });
+
+// Restart
+restartBtn.addEventListener("click", init);
+</script>
+
+</body>
+</html>

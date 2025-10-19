@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FPS Shooting Game</title>
+<style>
+body { margin:0; font-family:"Orbitron",sans-serif; background:#111; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; overflow:hidden; }
+h1 { color:#0ff; text-shadow:0 0 10px #0ff; text-align:center; }
+#controls { display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap; justify-content:center; }
+button, select { font-family:"Orbitron",sans-serif; font-size:16px; padding:6px 12px; border-radius:10px; border:2px solid rgba(0,255,255,0.6); background:transparent; color:#0ff; cursor:pointer; box-shadow:0 0 10px rgba(0,255,255,0.4); }
+button:hover, select:hover { box-shadow:0 0 20px #0ff; border-color:#0ff; }
+canvas { border:2px solid rgba(0,255,255,0.5); border-radius:12px; background:rgba(0,255,255,0.05); box-shadow:0 0 20px rgba(0,255,255,0.3); }
+#scoreDisplay, #timerDisplay { margin:5px 0; font-size:18px; text-shadow:0 0 5px #0ff; }
+
+/* Game Over Overlay */
+#gameOverOverlay {
+  display:none;
+  position:absolute;
+  top:0; left:0;
+  width:100%; height:100%;
+  background: rgba(0,0,0,0.95);
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  color:#0ff;
+  font-size:24px;
+  text-align:center;
+  z-index:100;
+  text-shadow: 0 0 10px #0ff;
+}
+#gameOverOverlay button {
+  margin-top:15px;
+  padding:10px 20px;
+  font-size:18px;
+  width:180px;
+}
+#gameOverOverlay button + button { margin-top:10px; }
+</style>
+</head>
+<body>
+
+<h1>FPS Shooting Game</h1>
+
+<div id="controls">
+  <label>Timer:
+    <select id="timeSelect">
+      <option value="30">30s</option>
+      <option value="60" selected>1min</option>
+      <option value="120">2min</option>
+      <option value="180">3min</option>
+      <option value="300">5min</option>
+    </select>
+  </label>
+  <label>Difficulty:
+    <select id="difficultySelect">
+      <option value="easy">Easy</option>
+      <option value="normal" selected>Normal</option>
+      <option value="hard">Hard</option>
+      <option value="insane">Insane</option>
+      <option value="impossible">Impossible</option>
+    </select>
+  </label>
+  <button id="startBtn">START</button>
+</div>
+
+<div id="scoreDisplay">Score: 0</div>
+<div id="timerDisplay">Time: 0s</div>
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+
+<!-- Game Over Overlay -->
+<div id="gameOverOverlay">
+  <div id="gameOverText">Game Over!<br>Score: 0</div>
+  <button id="restartBtn">Restart</button>
+  <button id="menuBtn">Menu</button>
+</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const startBtn = document.getElementById("startBtn");
+const timeSelect = document.getElementById("timeSelect");
+const difficultySelect = document.getElementById("difficultySelect");
+const scoreDisplay = document.getElementById("scoreDisplay");
+const timerDisplay = document.getElementById("timerDisplay");
+
+const gameOverOverlay = document.getElementById("gameOverOverlay");
+const gameOverText = document.getElementById("gameOverText");
+const restartBtn = document.getElementById("restartBtn");
+const menuBtn = document.getElementById("menuBtn");
+
+let targets = [];
+let score = 0;
+let gameInterval, spawnInterval, timerInterval;
+let gameTime = 60;
+let difficulty = 'normal';
+let gameOver = false;
+
+// Difficulty settings
+const difficulties = {
+  easy: { size:50, spawnRate:1500, speedInc:5 },
+  normal: { size:40, spawnRate:1200, speedInc:10 },
+  hard: { size:35, spawnRate:900, speedInc:15 },
+  insane: { size:30, spawnRate:700, speedInc:20 },
+  impossible: { size:25, spawnRate:500, speedInc:25 }
+};
+
+function spawnTarget(){
+  const size = difficulties[difficulty].size;
+  const x = Math.random()*(canvas.width-size);
+  const y = Math.random()*(canvas.height-size);
+  targets.push({x,y,size});
+  setTimeout(()=>{
+    const index = targets.findIndex(t=>t.x===x && t.y===y);
+    if(index!==-1) targets.splice(index,1);
+  }, difficulties[difficulty].spawnRate*3);
+}
+
+function spawnTargets(){
+  if(spawnInterval) clearInterval(spawnInterval);
+  spawnInterval = setInterval(spawnTarget, difficulties[difficulty].spawnRate/1.5);
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  targets.forEach(t=>{
+    ctx.fillStyle = "#0ff";
+    ctx.shadowColor = "#0ff";
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(t.x+t.size/2,t.y+t.size/2,t.size/2,0,Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur=0;
+  });
+}
+
+canvas.addEventListener("click",e=>{
+  if(gameOver) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  targets.forEach((t,i)=>{
+    if(mx>t.x && mx<t.x+t.size && my>t.y && my<t.y+t.size){
+      score++;
+      scoreDisplay.textContent="Score: "+score;
+      targets.splice(i,1);
+    }
+  });
+});
+
+function startGame(){
+  score=0;
+  scoreDisplay.textContent="Score: 0";
+  gameTime=parseInt(timeSelect.value);
+  difficulty=difficultySelect.value;
+  gameOver=false;
+  targets=[];
+  gameOverOverlay.style.display="none";
+
+  spawnTargets();
+
+  let timeLeft = gameTime;
+  timerDisplay.textContent = `Time: ${timeLeft}s`;
+  if(timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(()=>{
+    timeLeft--;
+    timerDisplay.textContent = `Time: ${timeLeft}s`;
+    if(timeLeft<=0){
+      endGame();
+    }
+  },1000);
+
+  if(gameInterval) clearInterval(gameInterval);
+  gameInterval = setInterval(draw,16);
+}
+
+function endGame(){
+  gameOver=true;
+  clearInterval(gameInterval);
+  clearInterval(spawnInterval);
+  clearInterval(timerInterval);
+  targets=[];
+  draw();
+  gameOverText.innerHTML = `Game Over!<br>Score: ${score}`;
+  gameOverOverlay.style.display="flex";
+}
+
+startBtn.addEventListener("click", startGame);
+restartBtn.addEventListener("click", startGame);
+
+// Menu button returns to interface
+menuBtn.addEventListener("click", ()=>{
+  gameOverOverlay.style.display="none";
+  scoreDisplay.textContent="Score: 0";
+  timerDisplay.textContent="Time: 0s";
+  targets=[];
+  draw();
+});
+</script>
+
+</body>
+</html>

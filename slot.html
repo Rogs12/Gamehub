@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neon Slot Machine</title>
+<style>
+body {
+  margin:0;
+  font-family:"Orbitron",sans-serif;
+  background:#111;
+  color:#0ff;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  height:100vh;
+  overflow:hidden;
+}
+h1 { text-align:center; color:#0ff; text-shadow:0 0 10px #0ff; margin-bottom:10px; }
+#creditsDisplay, #betDisplay { margin:5px 0; font-size:18px; text-shadow:0 0 5px #0ff; }
+button, input {
+  font-family:"Orbitron",sans-serif;
+  font-size:16px;
+  padding:6px 12px;
+  border-radius:10px;
+  border:2px solid rgba(0,255,255,0.6);
+  background:transparent;
+  color:#0ff;
+  cursor:pointer;
+  box-shadow:0 0 10px rgba(0,255,255,0.4);
+  margin:5px;
+}
+button:hover, input:hover { box-shadow:0 0 20px #0ff; border-color:#0ff; }
+#reels { display:flex; justify-content:center; align-items:center; margin:20px 0; }
+.reel {
+  width:80px; height:80px; margin:0 5px;
+  border:2px solid rgba(0,255,255,0.5); border-radius:10px;
+  display:flex; justify-content:center; align-items:center;
+  font-size:40px; background:rgba(0,255,255,0.05);
+  box-shadow:0 0 15px rgba(0,255,255,0.3); text-align:center;
+}
+#winTable {
+  color:#0ff; font-size:16px; text-align:left; margin-top:10px; border:1px solid rgba(0,255,255,0.4);
+  padding:10px; border-radius:8px;
+}
+#jackpotOverlay {
+  display:none; position:absolute; top:0; left:0; width:100%; height:100%;
+  background: rgba(0,0,0,0.95); display:flex;
+  flex-direction:column; justify-content:center; align-items:center;
+  color:#0ff; font-size:24px; text-align:center;
+  z-index:100; text-shadow: 0 0 10px #0ff;
+}
+#jackpotOverlay button {
+  margin-top:15px; padding:10px 20px; font-size:18px; width:200px;
+}
+</style>
+</head>
+<body>
+
+<h1>Neon Slot Machine</h1>
+<div id="creditsDisplay">Credits: 1000</div>
+<label>Bet:
+  <input type="number" id="betInput" value="100" min="100" max="10000000" step="100">
+</label>
+<button id="spinBtn">SPIN</button>
+
+<div id="reels">
+  <div class="reel" id="reel1">🍒</div>
+  <div class="reel" id="reel2">🍋</div>
+  <div class="reel" id="reel3">🍊</div>
+</div>
+
+<div id="winTable">
+  <strong>Winning Table:</strong><br>
+  🍒 3x = 1000 | 2x = 200<br>
+  🍋 3x = 1200 | 2x = 250<br>
+  🍊 3x = 1500 | 2x = 300<br>
+  🍉 3x = 2000 | 2x = 400<br>
+  🍇 3x = 2500 | 2x = 500<br>
+  ⭐ 3x = 5000 | 2x = 1000<br>
+  💎 3x = 10000 | 2x = 2000
+</div>
+
+<!-- Jackpot Overlay -->
+<div id="jackpotOverlay">
+  <div id="jackpotText">JACKPOT!</div>
+  <button id="jackpotCloseBtn">Close</button>
+</div>
+
+<audio id="spinSound" src="https://www.soundjay.com/button/sounds/button-16.mp3"></audio>
+
+<script>
+const spinBtn = document.getElementById("spinBtn");
+const creditsDisplay = document.getElementById("creditsDisplay");
+const betInput = document.getElementById("betInput");
+const reel1 = document.getElementById("reel1");
+const reel2 = document.getElementById("reel2");
+const reel3 = document.getElementById("reel3");
+const jackpotOverlay = document.getElementById("jackpotOverlay");
+const jackpotText = document.getElementById("jackpotText");
+const jackpotCloseBtn = document.getElementById("jackpotCloseBtn");
+const spinSound = document.getElementById("spinSound");
+
+let credits = 1000;
+let symbols = ["🍒","🍋","🍊","🍉","🍇","⭐","💎"];
+let spinning = false;
+
+function spin(){
+  if(spinning) return;
+  let bet = parseInt(betInput.value);
+  if(isNaN(bet)||bet<100||bet>10000000||bet>credits){
+    alert("Invalid bet!");
+    return;
+  }
+  credits-=bet;
+  creditsDisplay.textContent="Credits: "+credits;
+  spinning=true;
+  spinSound.currentTime=0; spinSound.play();
+
+  let spins=0;
+  const interval = setInterval(()=>{
+    reel1.textContent = symbols[Math.floor(Math.random()*symbols.length)];
+    reel2.textContent = symbols[Math.floor(Math.random()*symbols.length)];
+    reel3.textContent = symbols[Math.floor(Math.random()*symbols.length)];
+    spins++;
+    if(spins>20){
+      clearInterval(interval);
+      spinning=false;
+      checkWin(bet);
+    }
+  },100);
+}
+
+function checkWin(bet){
+  const s1=reel1.textContent;
+  const s2=reel2.textContent;
+  const s3=reel3.textContent;
+  let win=0;
+  if(s1===s2 && s2===s3){
+    win=bet*10;
+    credits+=win;
+    showJackpot("JACKPOT! +" + win);
+  } else if(s1===s2 || s2===s3 || s1===s3){
+    win=bet*2;
+    credits+=win;
+    showJackpot("WIN! +" + win);
+  }
+  creditsDisplay.textContent="Credits: "+credits;
+  if(credits<=0){
+    creditsDisplay.textContent="Credits: 0";
+    spinBtn.disabled=true;
+    betInput.disabled=true;
+  }
+}
+
+function showJackpot(text){
+  jackpotText.textContent=text;
+  jackpotOverlay.style.display="flex";
+}
+
+function closeJackpot(){
+  jackpotOverlay.style.display="none";
+}
+
+// Auto-start: enable spin immediately
+spinBtn.disabled=false;
+
+spinBtn.addEventListener("click",spin);
+jackpotCloseBtn.addEventListener("click",closeJackpot);
+</script>
+
+</body>
+</html>
